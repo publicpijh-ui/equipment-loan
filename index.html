@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>教務處設備借用登記表</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--tx:#1d2433;--mu:#6b7488;--bd:#e1e5ee;--pr:#2f6fed;--prt:#fff;--ok:#1e8e5a;--warn:#c77a00;--bad:#d23b3b;--sf:#eef2fb;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151c;--card:#1b2029;--tx:#e8ecf4;--mu:#9aa4b8;--bd:#2c3340;--pr:#5b8cff;--prt:#0b1020;--ok:#4cc38a;--warn:#f0a93b;--bad:#ff7070;--sf:#222a38;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12151c;--card:#1b2029;--tx:#e8ecf4;--mu:#9aa4b8;--bd:#2c3340;--pr:#5b8cff;--prt:#0b1020;--ok:#4cc38a;--warn:#f0a93b;--bad:#ff7070;--sf:#222a38;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+header h1{font-size:20px;margin:0;flex:1;min-width:200px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:17px;margin:0 0 10px}
+label{display:block;font-size:14px;color:var(--mu);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:11px 12px;min-height:44px}
+button{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:10px 14px;min-height:44px}
+button.p{background:var(--pr);color:var(--prt);border-color:var(--pr);font-weight:600}
+button.s{min-height:38px;padding:6px 12px;font-size:14px}
+button.d{color:var(--bad)}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px}
+.tabs button{white-space:nowrap}.tabs button.on{background:var(--pr);color:var(--prt);border-color:var(--pr)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.eq{border:1px solid var(--bd);border-radius:12px;padding:12px;background:var(--sf)}
+.eq b{display:block}.mu{color:var(--mu);font-size:14px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid currentColor;margin-left:4px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px 0;border-top:1px solid var(--bd)}
+.row:first-of-type{border-top:0}.row .m{flex:1;min-width:200px}
+.two{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+@media(max-width:520px){.two{grid-template-columns:1fr}}
+.mail{white-space:pre-wrap;background:var(--bg);border:1px dashed var(--bd);border-radius:10px;padding:12px;font-size:14px;margin:8px 0}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 18px;border-radius:99px;opacity:0;transition:.25s;pointer-events:none;max-width:90%}
+#toast.show{opacity:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{min-height:36px;padding:4px 10px;font-size:13px;border-radius:8px}
+.chip.on{background:var(--pr);color:var(--prt);border-color:var(--pr)}
+.chip.out{opacity:.45}.chip.done{text-decoration:line-through;opacity:.6}
+.chip.rep{color:var(--warn);border-color:var(--warn)}.chip.off{color:var(--bad);border-color:var(--bad)}
+#ld{position:fixed;top:0;left:0;height:3px;width:0;background:var(--pr);transition:width 8s;z-index:9}body.ld #ld{width:90%}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="ld"></div>
+<div id="toast"></div>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+// ===== 設定(部署時填入) =====
+const API = 'https://script.google.com/macros/s/AKfycbxdoucAbPpqcP6edciK0F5-GfUoiabEDpH26P610e0xSjL9krOnUgvODEHfne9RavtivQ/exec';
+const CLIENT_ID = '813710543955-r6l1jafvflnqc10639rdeh5ch4699rnt.apps.googleusercontent.com';
+const DEFAULT_HOUR = 16, REMIND_HOUR = 17;
+
+const pad = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = s => { const d = new Date(s); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) };
+function toast(t) { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2400) }
+
+let S = null, tok = null, tab = 'borrow', fEq = null, fSel = [], fDue = '', fNote = '';
+const isAdmin = () => S.role !== 'user', isSuper = () => S.role === 'super';
+const rLabel = () => ({ super: '最大權限管理人', admin: '管理人', user: S.me.endsWith('@smail.hc.edu.tw') ? '學生' : '教師' })[S.role];
+const borrowedSet = () => new Set(S.busy);
+const freeUnits = id => { const b = borrowedSet(); return S.units.filter(u => u.eq === id && u.st === '可借' && !b.has(u.code)) };
+const eqName = id => (S.eq.find(e => e.id === id) || { name: '(已刪除)' }).name;
+const unitEq = c => (S.units.find(u => u.code === c) || {}).eq;
+const open = r => r.units.some(u => !u.ret);
+const overdue = r => open(r) && new Date(r.due) < new Date();
+
+// ===== 與 Apps Script 溝通 =====
+async function api(a, x) {
+  document.body.classList.add('ld');
+  try {
+    const r = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ tok, a }, x || {})) });
+    const j = await r.json();
+    if (!j.ok) { if (/驗證/.test(j.err)) { S = null; tok = null; render() } toast(j.err); return null }
+    S = j; render(); return j;
+  } catch (e) { toast('連線失敗,請稍後再試'); return null }
+  finally { document.body.classList.remove('ld') }
+}
+function initGsi() {
+  const el = document.getElementById('gbtn'); if (!el) return;
+  if (!window.google || !google.accounts) return setTimeout(initGsi, 300);
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: r => { tok = r.credential; api('get') } });
+  google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', locale: 'zh-TW', text: 'signin_with' });
+}
+
+// ===== 畫面 =====
+function render() {
+  const A = document.getElementById('app');
+  if (!S) {
+    A.innerHTML = `<div class="card" style="max-width:420px;margin:8vh auto"><h1 style="font-size:20px;margin:0 0 4px">教務處設備借用登記表</h1><p class="mu">請使用學校 Google 帳號登入<br>@tmail.hc.edu.tw(教師)或 @smail.hc.edu.tw(學生)</p><div id="gbtn" style="margin-top:14px;min-height:44px"></div></div>`;
+    return initGsi();
+  }
+  const tabs = [['borrow', '借用登記'], ['mine', '我的借用']];
+  if (isAdmin()) tabs.push(['all', '全部紀錄'], ['equip', '設備管理'], ['mail', '提醒信']);
+  if (isSuper()) tabs.push(['admins', '管理人名單']);
+  if (!tabs.some(t => t[0] === tab)) tab = 'borrow';
+  const v = { borrow: vBorrow, mine: () => vList(S.rec.filter(r => r.user === S.me), false), all: () => vList(S.rec, true), equip: vEquip, mail: vMail, admins: vAdmins }[tab]();
+  A.innerHTML = `<header><h1>教務處設備借用登記表</h1><span class="mu">${esc(S.me)}<span class="tag ${isAdmin() ? 'warn' : 'ok'}">${rLabel()}</span></span><button class="s" data-a="refresh">重新整理</button><button class="s" data-a="logout">登出</button></header><div class="tabs">${tabs.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-a="tab" data-v="${t[0]}">${t[1]}</button>`).join('')}</div>${v}`;
+}
+function vBorrow() {
+  if (!S.eq.length) return '<div class="card mu">目前尚無設備,請管理人先到「設備管理」新增。</div>';
+  if (!S.eq.some(e => e.id === fEq)) fEq = S.eq[0].id;
+  const free = freeUnits(fEq);
+  return `<div class="card"><h2>目前設備</h2><div class="grid">${S.eq.map(e => `<div class="eq"><b>${esc(e.name)}</b><span class="mu">可借 ${freeUnits(e.id).length} / 共 ${S.units.filter(u => u.eq === e.id).length}</span></div>`).join('')}</div></div>
+ <div class="card"><h2>登記借用</h2><label>設備</label><select data-a="feq">${S.eq.map(e => `<option value="${e.id}" ${e.id === fEq ? 'selected' : ''}>${esc(e.name)}(可借 ${freeUnits(e.id).length})</option>`).join('')}</select>
+ <div class="two"><div><label>借用數量(自動依編號選取)</label><input type="number" min="0" max="${free.length}" value="${fSel.length}" inputmode="numeric" data-a="fqty"></div>
+ <div><label>預計歸還日期(選填)</label><input type="date" min="${today()}" value="${fDue}" data-a="fdue"></div></div>
+ <label>選擇編號(已選 ${fSel.length} 台,可自行點選調整)</label><div class="chips">${free.length ? free.map(u => `<button class="chip ${fSel.includes(u.code) ? 'on' : ''}" data-a="pick" data-v="${u.code}">${u.code}</button>`).join('') : '<span class="mu">目前無可借設備</span>'}</div>
+ <p class="mu" style="margin:8px 0 0">未填寫日期則預設為今天 ${DEFAULT_HOUR}:00 放學前歸還。</p>
+ <label>備註(選填)</label><input value="${esc(fNote)}" maxlength="60" placeholder="例如:八年三班課堂使用" data-a="fnote"><div style="height:14px"></div><button class="p" data-a="borrow">送出借用</button></div>`;
+}
+function vList(list, admin) {
+  const L = [...list].sort((a, b) => b.from.localeCompare(a.from));
+  if (!L.length) return '<div class="card mu">目前沒有紀錄</div>';
+  return `<div class="card">${L.map(r => {
+    const od = overdue(r), o = open(r);
+    return `<div class="row"><div class="m"><b>${esc(eqName(unitEq(r.units[0].c)))} × ${r.units.length}</b><span class="tag ${!o ? 'ok' : od ? 'bad' : 'warn'}">${!o ? '已歸還' : od ? '已逾期' : '借出中'}</span><div class="mu">${admin ? esc(r.user) + ' · ' : ''}借出 ${fmt(r.from)} · 預計歸還 ${fmt(r.due)}${r.note ? ' · ' + esc(r.note) : ''}</div><div class="chips">${r.units.map(u => admin ? `<button class="chip ${u.ret ? 'done' : ''}" data-a="uret" data-v="${r.id}" data-c="${u.c}">${u.c}${u.ret ? ' ✓' : ''}</button>` : `<span class="tag ${u.ret ? 'ok' : 'warn'}" style="margin:0">${u.c}${u.ret ? ' ✓' : ''}</span>`).join('')}</div>${admin && o ? '<div class="mu" style="margin-top:4px">點編號可個別標記歸還</div>' : ''}</div>${admin ? (o ? `<button class="s" data-a="retall" data-v="${r.id}">全部歸還</button>` : '') + `<button class="s d" data-a="delrec" data-v="${r.id}">刪除</button>` : ''}</div>`
+  }).join('')}</div>`;
+}
+function vEquip() {
+  const b = borrowedSet();
+  return `<div class="card"><h2>設備狀態管理</h2><p class="mu" style="margin-top:0">點編號切換狀態:可借 → 維修中 → 停用。</p>${S.eq.map(e => `<div class="row"><div class="m"><b>${esc(e.name)}</b><div class="chips">${S.units.filter(u => u.eq === e.id).map(u => `<button class="chip ${u.st === '維修中' ? 'rep' : u.st === '停用' ? 'off' : ''} ${b.has(u.code) ? 'out' : ''}" data-a="ust" data-v="${u.code}">${u.code}${b.has(u.code) ? '(借出)' : u.st === '可借' ? '' : '·' + u.st}</button>`).join('')}</div></div><button class="s" data-a="addu" data-v="${e.id}">+1 台</button><button class="s d" data-a="deq" data-v="${e.id}">刪除</button></div>`).join('') || '<p class="mu">尚無設備</p>'}</div>
+ <div class="card"><h2>新增設備類別</h2><div class="two"><div><label>名稱</label><input id="nn" placeholder="例如:平板"></div><div><label>編號前綴(英數)</label><input id="np" placeholder="例如:iPad"></div></div><label>初始台數</label><input id="nt" type="number" min="1" value="1"><div style="height:12px"></div><button class="p" data-a="addeq">新增</button></div>`;
+}
+function vMail() {
+  return `<div class="card"><h2>每日提醒信</h2><p class="mu">系統每天約 ${REMIND_HOUR}:00(${REMIND_HOUR}:00~${REMIND_HOUR + 1}:00 之間)自動寄出:①每位尚未歸還的借用人收到一封個人提醒;②最大權限管理人收到一封彙整信。信件由教務處帳號寄出。</p><p>目前尚未歸還的借用紀錄:${S.rec.filter(open).length} 筆</p>${isSuper() ? '<button class="p" data-a="send">立即寄出一次(測試)</button>' : ''}</div>`;
+}
+function vAdmins() {
+  return `<div class="card"><h2>管理人名單</h2><div class="row"><div class="m"><b>publicpijh@tmail.hc.edu.tw</b><span class="tag warn">最大權限(固定)</span></div></div>${S.admins.map(a => `<div class="row"><div class="m">${esc(a)}<span class="tag ok">管理人</span></div><button class="s d" data-a="rmadm" data-v="${esc(a)}">移除</button></div>`).join('') || '<p class="mu">尚未指派其他管理人</p>'}</div>
+ <div class="card"><h2>指派管理人</h2><label>教師信箱(@tmail.hc.edu.tw)</label><input id="na" type="email" inputmode="email"><div style="height:12px"></div><button class="p" data-a="addadm">新增</button></div>`;
+}
+
+// ===== 事件 =====
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-a]'); if (!b || ['SELECT', 'INPUT'].includes(b.tagName)) return;
+  const a = b.dataset.a, v = b.dataset.v, id = +v;
+  if (a === 'logout') { try { google.accounts.id.disableAutoSelect() } catch (x) {} S = null; tok = null; return render() }
+  if (a === 'tab') { tab = v; return render() }
+  if (a === 'pick') { fSel = fSel.includes(v) ? fSel.filter(x => x !== v) : [...fSel, v]; return render() }
+  if (a === 'refresh') return api('get');
+  if (a === 'borrow') {
+    if (!fSel.length) return toast('請選擇至少一台');
+    if (await api('borrow', { units: fSel, due: fDue, note: fNote.trim() })) { fSel = []; fDue = ''; fNote = ''; tab = 'mine'; render(); toast('借用登記完成') }
+    return;
+  }
+  if (a === 'uret') return api('uret', { id, c: b.dataset.c });
+  if (a === 'retall') return api('retall', { id });
+  if (a === 'delrec') { if (confirm('確定刪除此紀錄?')) api('delrec', { id }); return }
+  if (a === 'ust') return api('ust', { c: v });
+  if (a === 'addu') return api('addu', { id });
+  if (a === 'deq') { if (confirm('確定刪除此設備類別?')) api('deq', { id }); return }
+  if (a === 'addeq') return api('addeq', { name: document.getElementById('nn').value, pre: document.getElementById('np').value, count: document.getElementById('nt').value });
+  if (a === 'addadm') return api('addadm', { email: document.getElementById('na').value });
+  if (a === 'rmadm') return api('rmadm', { email: v });
+  if (a === 'send') { if (!confirm('立即寄出一次提醒信?')) return; const j = await api('send'); if (j) toast('已寄出,共 ' + j.sent + ' 位借用人') }
+});
+document.addEventListener('change', e => {
+  const t = e.target, a = t.dataset && t.dataset.a; if (!a) return;
+  if (a === 'feq') { fEq = +t.value; fSel = []; render() }
+  if (a === 'fqty') { fSel = freeUnits(fEq).slice(0, Math.max(0, +t.value || 0)).map(u => u.code); render() }
+  if (a === 'fdue') fDue = t.value;
+});
+document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.a === 'fnote') fNote = e.target.value });
+render();
+</script>
+</body>
+</html>
