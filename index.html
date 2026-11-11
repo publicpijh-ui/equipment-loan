@@ -60,7 +60,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const fmt = s => { const d = new Date(s); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) };
 function toast(t) { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2400) }
 
-let S = null, tok = null, tab = 'borrow', fEq = null, fSel = [], fDue = '', fNote = '', fFor = '';
+let S = null, tok = null, tab = 'borrow', fEq = null, fSel = [], fDue = '', fNote = '', fFor = '', userFilter = '', editUser = '';
 const isAdmin = () => S.role !== 'user', isSuper = () => S.role === 'super';
 const rLabel = () => ({ super: '最大權限管理人', admin: '管理人', user: S.me.endsWith('@smail.hc.edu.tw') ? '學生' : '教師' })[S.role];
 const borrowedSet = () => new Set(S.busy);
@@ -97,19 +97,19 @@ function render() {
   }
   const tabs = [['borrow', '借用登記'], ['mine', '我的借用']];
   if (isAdmin()) tabs.push(['all', '全部紀錄'], ['equip', '設備管理'], ['mail', '提醒信']);
-  if (isSuper()) tabs.push(['admins', '管理人名單']);
+  if (isSuper()) tabs.push(['users', '帳號名冊'], ['admins', '管理人名單']);
   if (!tabs.some(t => t[0] === tab)) tab = 'borrow';
-  const v = { borrow: vBorrow, mine: () => vList(S.rec.filter(r => r.user === S.me), false), all: () => vList(S.rec, true), equip: vEquip, mail: vMail, admins: vAdmins }[tab]();
+  const v = { borrow: vBorrow, mine: () => vList(S.rec.filter(r => r.user === S.me), false), all: () => vList(S.rec, true), equip: vEquip, mail: vMail, users: vUsers, admins: vAdmins }[tab]();
   A.innerHTML = `<header><h1>教務處設備借用登記表</h1><span class="mu">${esc(S.me)}<span class="tag ${isAdmin() ? 'warn' : 'ok'}">${rLabel()}</span></span><button class="s" data-a="refresh">重新整理</button><button class="s" data-a="logout">登出</button></header><div class="tabs">${tabs.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-a="tab" data-v="${t[0]}">${t[1]}</button>`).join('')}</div>${v}`;
 }
 function vBorrow() {
   if (!S.eq.length) return '<div class="card mu">目前尚無設備,請管理人先到「設備管理」新增。</div>';
   if (!S.eq.some(e => e.id === fEq)) fEq = S.eq[0].id;
   const free = freeUnits(fEq);
-  const teachers = [...new Set(S.rec.map(r => r.user).filter(e => e.endsWith('@tmail.hc.edu.tw')))];
+  const users = (S.users || []).slice().sort((a, b) => (a.name + a.email).localeCompare(b.name + b.email, 'zh-Hant'));
   return `<div class="card"><h2>目前設備</h2><div class="grid">${S.eq.map(e => `<div class="eq"><b>${esc(e.name)}</b><span class="mu">可借 ${freeUnits(e.id).length} / 共 ${S.units.filter(u => u.eq === e.id).length}</span></div>`).join('')}</div></div>
  <div class="card"><h2>登記借用</h2><label>設備</label><select data-a="feq">${S.eq.map(e => `<option value="${e.id}" ${e.id === fEq ? 'selected' : ''}>${esc(e.name)}(可借 ${freeUnits(e.id).length})</option>`).join('')}</select>
- ${isAdmin() ? `<label>借用人帳號（管理人代借）</label><input list="teachers" type="email" inputmode="email" value="${esc(fFor)}" placeholder="選擇或輸入教師 @tmail.hc.edu.tw 信箱" data-a="ffor"><datalist id="teachers">${teachers.map(e => `<option value="${esc(e)}">`).join('')}</datalist><p class="mu" style="margin:6px 0 0">留白代表管理人本人借用。代借紀錄與未歸還提醒信會歸屬並寄給指定教師。</p>` : ''}
+ ${isAdmin() ? `<label>借用帳號（管理人代借）</label><input list="users" type="email" inputmode="email" value="${esc(fFor)}" placeholder="輸入帳號或姓名以篩選" data-a="ffor"><datalist id="users">${users.map(u => `<option value="${esc(u.email)}" label="${esc((u.name ? u.name + ' · ' : '') + u.type)}">`).join('')}</datalist><p class="mu" style="margin:6px 0 0">留白代表管理人本人借用。代借紀錄與未歸還提醒信會歸屬並寄給指定帳號。</p>` : ''}
  <div class="two"><div><label>借用數量(自動依編號選取)</label><input type="number" min="0" max="${free.length}" value="${fSel.length}" inputmode="numeric" data-a="fqty"></div>
  <div><label>預計歸還日期(選填)</label><input type="date" min="${today()}" value="${fDue}" data-a="fdue"></div></div>
  <label>選擇編號(已選 ${fSel.length} 台,可自行點選調整)</label><div class="chips">${free.length ? free.map(u => `<button class="chip ${fSel.includes(u.code) ? 'on' : ''}" data-a="pick" data-v="${u.code}">${u.code}</button>`).join('') : '<span class="mu">目前無可借設備</span>'}</div>
@@ -127,10 +127,15 @@ function vList(list, admin) {
 function vEquip() {
   const b = borrowedSet();
   return `<div class="card"><h2>設備狀態管理</h2><p class="mu" style="margin-top:0">點編號切換狀態:可借 → 維修中 → 停用。</p>${S.eq.map(e => `<div class="row"><div class="m"><b>${esc(e.name)}</b><div class="chips">${S.units.filter(u => u.eq === e.id).map(u => `<button class="chip ${u.st === '維修中' ? 'rep' : u.st === '停用' ? 'off' : ''} ${b.has(u.code) ? 'out' : ''}" data-a="ust" data-v="${u.code}">${u.code}${b.has(u.code) ? '(借出)' : u.st === '可借' ? '' : '·' + u.st}</button>`).join('')}</div></div><button class="s" data-a="addu" data-v="${e.id}">+1 台</button><button class="s d" data-a="deq" data-v="${e.id}">刪除</button></div>`).join('') || '<p class="mu">尚無設備</p>'}</div>
- <div class="card"><h2>新增設備類別</h2><div class="two"><div><label>名稱</label><input id="nn" placeholder="例如:平板"></div><div><label>編號前綴(英數)</label><input id="np" placeholder="例如:iPad"></div></div><label>初始台數</label><input id="nt" type="number" min="1" value="1"><div style="height:12px"></div><button class="p" data-a="addeq">新增</button></div>`;
+ <div class="card"><h2>新增設備類別</h2><div class="two"><div><label>名稱</label><input id="nn" placeholder="例如:平板"></div><div><label>編號前綴(中文或英數)</label><input id="np" placeholder="例如:教具或 iPad"></div></div><label>初始台數</label><input id="nt" type="number" min="1" value="1"><div style="height:12px"></div><button class="p" data-a="addeq">新增</button></div>`;
 }
 function vMail() {
   return `<div class="card"><h2>每日提醒信</h2><p class="mu">系統每天約 ${REMIND_HOUR}:00(${REMIND_HOUR}:00~${REMIND_HOUR + 1}:00 之間)自動寄出:①每位尚未歸還的借用人收到一封個人提醒;②最大權限管理人收到一封彙整信。信件由教務處帳號寄出。</p><p>目前尚未歸還的借用紀錄:${S.rec.filter(open).length} 筆</p>${isSuper() ? '<button class="p" data-a="send">立即寄出一次(測試)</button>' : ''}</div>`;
+}
+function vUsers() {
+  const q = userFilter.trim().toLowerCase();
+  const U = (S.users || []).filter(u => !q || [u.email, u.name, u.type].join(' ').toLowerCase().includes(q)).sort((a, b) => (a.name + a.email).localeCompare(b.name + b.email, 'zh-Hant'));
+  return `<div class="card"><h2>帳號名冊</h2><p class="mu">名冊供管理人代借時輸入篩選；教師與學生會依信箱網域自動辨識。</p><label>篩選帳號或姓名</label><div class="two"><input id="uf" value="${esc(userFilter)}" placeholder="輸入帳號或姓名"><button class="s" data-a="applyfilter">篩選</button></div><p class="mu">共 ${U.length} 筆</p>${U.map(u => editUser === u.email ? `<div class="row"><div class="m"><label>帳號</label><input id="ue" type="email" value="${esc(u.email)}"><label>姓名（選填）</label><input id="un" value="${esc(u.name)}"></div><span class="tag ${u.type === '教師' ? 'warn' : 'ok'}">${u.type}</span><button class="s" data-a="saveuser" data-v="${esc(u.email)}">儲存</button><button class="s" data-a="canceluser">取消</button></div>` : `<div class="row"><div class="m"><b>${esc(u.name || '(未填姓名)')}</b><span class="tag ${u.type === '教師' ? 'warn' : 'ok'}">${u.type}</span><div class="mu">${esc(u.email)}</div></div><button class="s" data-a="edituser" data-v="${esc(u.email)}">編輯</button><button class="s d" data-a="rmuser" data-v="${esc(u.email)}">移除</button></div>`).join('') || '<p class="mu">尚未建立帳號名冊</p>'}</div><div class="card"><h2>新增帳號</h2><div class="two"><div><label>帳號</label><input id="nae" type="email" inputmode="email" placeholder="教師或學生學校信箱"></div><div><label>姓名（選填）</label><input id="nan" placeholder="例如：王小明"></div></div><div style="height:12px"></div><button class="p" data-a="adduser">新增</button></div>`;
 }
 function vAdmins() {
   return `<div class="card"><h2>管理人名單</h2><div class="row"><div class="m"><b>publicpijh@tmail.hc.edu.tw</b><span class="tag warn">最大權限(固定)</span></div></div>${S.admins.map(a => `<div class="row"><div class="m">${esc(a)}<span class="tag ok">管理人</span></div><button class="s d" data-a="rmadm" data-v="${esc(a)}">移除</button></div>`).join('') || '<p class="mu">尚未指派其他管理人</p>'}</div>
@@ -145,6 +150,12 @@ document.addEventListener('click', async e => {
   if (a === 'tab') { tab = v; return render() }
   if (a === 'pick') { fSel = fSel.includes(v) ? fSel.filter(x => x !== v) : [...fSel, v]; return render() }
   if (a === 'refresh') return api('get');
+  if (a === 'applyfilter') { userFilter = document.getElementById('uf').value; return render() }
+  if (a === 'edituser') { editUser = v; return render() }
+  if (a === 'canceluser') { editUser = ''; return render() }
+  if (a === 'adduser') return api('adduser', { email: document.getElementById('nae').value, name: document.getElementById('nan').value });
+  if (a === 'saveuser') { const j = await api('edituser', { old: v, email: document.getElementById('ue').value, name: document.getElementById('un').value }); if (j) { editUser = ''; render() } return }
+  if (a === 'rmuser') { if (confirm('確定移除此帳號?')) return api('rmuser', { email: v }); return }
   if (a === 'borrow') {
     if (!fSel.length) return toast('請選擇至少一台');
     const target = fFor.trim();
