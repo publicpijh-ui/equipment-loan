@@ -61,6 +61,18 @@ const fmt = s => { const d = new Date(s); return (d.getMonth() + 1) + '/' + d.ge
 function toast(t) { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2400) }
 
 let S = null, tok = null, tab = 'borrow', fEq = null, fSel = [], fDue = '', fNote = '', fFor = '', userFilter = '', editUser = '';
+const STORE = 'equipment-loan-session-v1';
+function saveSession() {
+  try { sessionStorage.setItem(STORE, JSON.stringify({ tok, state: S, saved: Date.now() })); } catch (x) {}
+}
+function clearSession() { try { sessionStorage.removeItem(STORE); } catch (x) {} }
+function restoreSession() {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(STORE) || 'null');
+    if (v && v.tok && v.state) { tok = v.tok; S = v.state; return true; }
+  } catch (x) { clearSession(); }
+  return false;
+}
 const isAdmin = () => S.role !== 'user', isSuper = () => S.role === 'super';
 const rLabel = () => ({ super: '最大權限管理人', admin: '管理人', user: S.me.endsWith('@smail.hc.edu.tw') ? '學生' : '教師' })[S.role];
 const borrowedSet = () => new Set(S.busy);
@@ -76,16 +88,17 @@ async function api(a, x) {
   try {
     const r = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ tok, a }, x || {})) });
     const j = await r.json();
-    if (!j.ok) { if (/驗證/.test(j.err)) { S = null; tok = null; render() } toast(j.err); return null }
-    S = j; render(); return j;
+    if (!j.ok) { if (/驗證/.test(j.err)) { S = null; tok = null; clearSession(); render() } toast(j.err); return null }
+    S = j; saveSession(); render(); return j;
   } catch (e) { toast('連線失敗,請稍後再試'); return null }
   finally { document.body.classList.remove('ld') }
 }
 function initGsi() {
   const el = document.getElementById('gbtn'); if (!el) return;
   if (!window.google || !google.accounts) return setTimeout(initGsi, 300);
-  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: r => { tok = r.credential; api('get') } });
+  google.accounts.id.initialize({ client_id: CLIENT_ID, auto_select: true, callback: r => { tok = r.credential; api('get') } });
   google.accounts.id.renderButton(el, { theme: 'outline', size: 'large', locale: 'zh-TW', text: 'signin_with' });
+  google.accounts.id.prompt();
 }
 
 // ===== 畫面 =====
@@ -135,7 +148,7 @@ function vMail() {
 function vUsers() {
   const q = userFilter.trim().toLowerCase();
   const U = (S.users || []).filter(u => !q || [u.email, u.name, u.type].join(' ').toLowerCase().includes(q)).sort((a, b) => (a.name + a.email).localeCompare(b.name + b.email, 'zh-Hant'));
-  return `<div class="card"><h2>帳號名冊</h2><p class="mu">名冊供管理人代借時輸入篩選；教師與學生會依信箱網域自動辨識。</p><label>篩選帳號或姓名</label><div class="two"><input id="uf" value="${esc(userFilter)}" placeholder="輸入帳號或姓名"><button class="s" data-a="applyfilter">篩選</button></div><p class="mu">共 ${U.length} 筆</p>${U.map(u => editUser === u.email ? `<div class="row"><div class="m"><label>帳號</label><input id="ue" type="email" value="${esc(u.email)}"><label>姓名（選填）</label><input id="un" value="${esc(u.name)}"></div><span class="tag ${u.type === '教師' ? 'warn' : 'ok'}">${u.type}</span><button class="s" data-a="saveuser" data-v="${esc(u.email)}">儲存</button><button class="s" data-a="canceluser">取消</button></div>` : `<div class="row"><div class="m"><b>${esc(u.name || '(未填姓名)')}</b><span class="tag ${u.type === '教師' ? 'warn' : 'ok'}">${u.type}</span><div class="mu">${esc(u.email)}</div></div><button class="s" data-a="edituser" data-v="${esc(u.email)}">編輯</button><button class="s d" data-a="rmuser" data-v="${esc(u.email)}">移除</button></div>`).join('') || '<p class="mu">尚未建立帳號名冊</p>'}</div><div class="card"><h2>新增帳號</h2><div class="two"><div><label>帳號</label><input id="nae" type="email" inputmode="email" placeholder="教師或學生學校信箱"></div><div><label>姓名（選填）</label><input id="nan" placeholder="例如：王小明"></div></div><div style="height:12px"></div><button class="p" data-a="adduser">新增</button></div>`;
+  return `<div class="card"><h2>帳號名冊</h2><p class="mu">名冊供管理人代借時以姓名或信箱關鍵字即時篩選；教師與學生會依信箱網域自動辨識。</p><label>篩選帳號或姓名</label><div class="two"><input id="uf" value="${esc(userFilter)}" placeholder="輸入帳號或姓名"><button class="s" data-a="applyfilter">篩選</button></div><p class="mu">共 ${U.length} 筆</p>${U.map(u => editUser === u.email ? `<div class="row"><div class="m"><label>帳號</label><input id="ue" type="email" value="${esc(u.email)}"><label>姓名（選填）</label><input id="un" value="${esc(u.name)}"></div><span class="tag ${u.type === '教師' ? 'warn' : 'ok'}">${u.type}</span><button class="s" data-a="saveuser" data-v="${esc(u.email)}">儲存</button><button class="s" data-a="canceluser">取消</button></div>` : `<div class="row"><div class="m"><b>${esc(u.name || '(未填姓名)')}</b><span class="tag ${u.type === '教師' ? 'warn' : 'ok'}">${u.type}</span><div class="mu">${esc(u.email)}</div></div><button class="s" data-a="edituser" data-v="${esc(u.email)}">編輯</button><button class="s d" data-a="rmuser" data-v="${esc(u.email)}">移除</button></div>`).join('') || '<p class="mu">尚未建立帳號名冊</p>'}</div><div class="card"><h2>匯入或更新帳號名冊</h2><p class="mu">每行一筆，格式為「姓名,信箱」或只填「信箱」。同一信箱會更新姓名，不會刪除原有帳號。</p><label>貼上師生帳號名冊</label><textarea id="ub" rows="7" placeholder="王小明,wang@tmail.hc.edu.tw&#10;陳小華,chen@smail.hc.edu.tw"></textarea><div style="height:12px"></div><button class="p" data-a="importusers">匯入／更新名冊</button></div><div class="card"><h2>新增單一帳號</h2><div class="two"><div><label>帳號</label><input id="nae" type="email" inputmode="email" placeholder="教師或學生學校信箱"></div><div><label>姓名（選填）</label><input id="nan" placeholder="例如：王小明"></div></div><div style="height:12px"></div><button class="p" data-a="adduser">新增</button></div>`;
 }
 function vAdmins() {
   return `<div class="card"><h2>管理人名單</h2><div class="row"><div class="m"><b>publicpijh@tmail.hc.edu.tw</b><span class="tag warn">最大權限(固定)</span></div></div>${S.admins.map(a => `<div class="row"><div class="m">${esc(a)}<span class="tag ok">管理人</span></div><button class="s d" data-a="rmadm" data-v="${esc(a)}">移除</button></div>`).join('') || '<p class="mu">尚未指派其他管理人</p>'}</div>
@@ -146,7 +159,7 @@ function vAdmins() {
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-a]'); if (!b || ['SELECT', 'INPUT'].includes(b.tagName)) return;
   const a = b.dataset.a, v = b.dataset.v, id = +v;
-  if (a === 'logout') { try { google.accounts.id.disableAutoSelect() } catch (x) {} S = null; tok = null; return render() }
+  if (a === 'logout') { try { google.accounts.id.disableAutoSelect() } catch (x) {} S = null; tok = null; clearSession(); return render() }
   if (a === 'tab') { tab = v; return render() }
   if (a === 'pick') { fSel = fSel.includes(v) ? fSel.filter(x => x !== v) : [...fSel, v]; return render() }
   if (a === 'refresh') return api('get');
@@ -154,6 +167,16 @@ document.addEventListener('click', async e => {
   if (a === 'edituser') { editUser = v; return render() }
   if (a === 'canceluser') { editUser = ''; return render() }
   if (a === 'adduser') return api('adduser', { email: document.getElementById('nae').value, name: document.getElementById('nan').value });
+  if (a === 'importusers') {
+    const rows = document.getElementById('ub').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+      const p = line.split(/[，,\t]/).map(x => x.trim()).filter(Boolean);
+      return p.length === 1 ? { email: p[0], name: '' } : { name: p[0], email: p[1] };
+    });
+    if (!rows.length) return toast('請先貼上至少一筆帳號');
+    const j = await api('upsertusers', { users: rows });
+    if (j) toast('已匯入或更新 ' + rows.length + ' 筆帳號');
+    return;
+  }
   if (a === 'saveuser') { const j = await api('edituser', { old: v, email: document.getElementById('ue').value, name: document.getElementById('un').value }); if (j) { editUser = ''; render() } return }
   if (a === 'rmuser') { if (confirm('確定移除此帳號?')) return api('rmuser', { email: v }); return }
   if (a === 'borrow') {
@@ -179,8 +202,13 @@ document.addEventListener('change', e => {
   if (a === 'fqty') { fSel = freeUnits(fEq).slice(0, Math.max(0, +t.value || 0)).map(u => u.code); render() }
   if (a === 'fdue') fDue = t.value;
 });
-document.addEventListener('input', e => { if (!e.target.dataset) return; if (e.target.dataset.a === 'fnote') fNote = e.target.value; if (e.target.dataset.a === 'ffor') fFor = e.target.value });
-render();
+document.addEventListener('input', e => {
+  if (e.target.id === 'uf') { userFilter = e.target.value; return; }
+  if (!e.target.dataset) return;
+  if (e.target.dataset.a === 'fnote') fNote = e.target.value;
+  if (e.target.dataset.a === 'ffor') fFor = e.target.value;
+});
+if (restoreSession()) { render(); api('get'); } else render();
 </script>
 </body>
 </html>
