@@ -60,7 +60,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const fmt = s => { const d = new Date(s); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) };
 function toast(t) { const e = document.getElementById('toast'); e.textContent = t; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2400) }
 
-let S = null, tok = null, tab = 'borrow', fEq = null, fSel = [], fDue = '', fNote = '';
+let S = null, tok = null, tab = 'borrow', fEq = null, fSel = [], fDue = '', fNote = '', fFor = '';
 const isAdmin = () => S.role !== 'user', isSuper = () => S.role === 'super';
 const rLabel = () => ({ super: '最大權限管理人', admin: '管理人', user: S.me.endsWith('@smail.hc.edu.tw') ? '學生' : '教師' })[S.role];
 const borrowedSet = () => new Set(S.busy);
@@ -106,8 +106,10 @@ function vBorrow() {
   if (!S.eq.length) return '<div class="card mu">目前尚無設備,請管理人先到「設備管理」新增。</div>';
   if (!S.eq.some(e => e.id === fEq)) fEq = S.eq[0].id;
   const free = freeUnits(fEq);
+  const teachers = [...new Set(S.rec.map(r => r.user).filter(e => e.endsWith('@tmail.hc.edu.tw')))];
   return `<div class="card"><h2>目前設備</h2><div class="grid">${S.eq.map(e => `<div class="eq"><b>${esc(e.name)}</b><span class="mu">可借 ${freeUnits(e.id).length} / 共 ${S.units.filter(u => u.eq === e.id).length}</span></div>`).join('')}</div></div>
  <div class="card"><h2>登記借用</h2><label>設備</label><select data-a="feq">${S.eq.map(e => `<option value="${e.id}" ${e.id === fEq ? 'selected' : ''}>${esc(e.name)}(可借 ${freeUnits(e.id).length})</option>`).join('')}</select>
+ ${isAdmin() ? `<label>借用人帳號（管理人代借）</label><input list="teachers" type="email" inputmode="email" value="${esc(fFor)}" placeholder="選擇或輸入教師 @tmail.hc.edu.tw 信箱" data-a="ffor"><datalist id="teachers">${teachers.map(e => `<option value="${esc(e)}">`).join('')}</datalist><p class="mu" style="margin:6px 0 0">留白代表管理人本人借用。代借紀錄與未歸還提醒信會歸屬並寄給指定教師。</p>` : ''}
  <div class="two"><div><label>借用數量(自動依編號選取)</label><input type="number" min="0" max="${free.length}" value="${fSel.length}" inputmode="numeric" data-a="fqty"></div>
  <div><label>預計歸還日期(選填)</label><input type="date" min="${today()}" value="${fDue}" data-a="fdue"></div></div>
  <label>選擇編號(已選 ${fSel.length} 台,可自行點選調整)</label><div class="chips">${free.length ? free.map(u => `<button class="chip ${fSel.includes(u.code) ? 'on' : ''}" data-a="pick" data-v="${u.code}">${u.code}</button>`).join('') : '<span class="mu">目前無可借設備</span>'}</div>
@@ -145,7 +147,8 @@ document.addEventListener('click', async e => {
   if (a === 'refresh') return api('get');
   if (a === 'borrow') {
     if (!fSel.length) return toast('請選擇至少一台');
-    if (await api('borrow', { units: fSel, due: fDue, note: fNote.trim() })) { fSel = []; fDue = ''; fNote = ''; tab = 'mine'; render(); toast('借用登記完成') }
+    const target = fFor.trim();
+    if (await api('borrow', { units: fSel, due: fDue, note: fNote.trim(), for: target })) { fSel = []; fDue = ''; fNote = ''; fFor = ''; tab = target ? 'all' : 'mine'; render(); toast(target ? '已代 ' + target + ' 完成借用' : '借用登記完成') }
     return;
   }
   if (a === 'uret') return api('uret', { id, c: b.dataset.c });
@@ -165,7 +168,7 @@ document.addEventListener('change', e => {
   if (a === 'fqty') { fSel = freeUnits(fEq).slice(0, Math.max(0, +t.value || 0)).map(u => u.code); render() }
   if (a === 'fdue') fDue = t.value;
 });
-document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.a === 'fnote') fNote = e.target.value });
+document.addEventListener('input', e => { if (!e.target.dataset) return; if (e.target.dataset.a === 'fnote') fNote = e.target.value; if (e.target.dataset.a === 'ffor') fFor = e.target.value });
 render();
 </script>
 </body>
